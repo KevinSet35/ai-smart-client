@@ -1,5 +1,6 @@
 import { OPENAI_MODEL_REGISTRY, OpenAIModel } from "../config/model-registry";
 import { OpenAIClientConfig } from "../types/config.types";
+import { ValidatedRateLimits, ValidatedRetrySettings, ValidatedThrottleSettings } from "../types/validator.types";
 
 export class ConfigValidator {
     // API Key Configuration
@@ -137,11 +138,8 @@ export class ConfigValidator {
     /**
      * Validate rate limiting configuration
      */
-    validateRateLimits(rateLimit?: OpenAIClientConfig["rateLimit"]): {
-        requestsPerMinute?: number;
-        tokensPerMinute?: number;
-    } {
-        const result: { requestsPerMinute?: number; tokensPerMinute?: number } = {};
+    validateRateLimits(rateLimit?: OpenAIClientConfig["rateLimit"]): ValidatedRateLimits {
+        const result: ValidatedRateLimits = {};
 
         if (!rateLimit) return result;
 
@@ -169,11 +167,7 @@ export class ConfigValidator {
         requestDelay?: number,
         useJitter?: boolean,
         jitterFactor?: number
-    ): {
-        requestDelay?: number;
-        useJitter: boolean;
-        jitterFactor: number;
-    } {
+    ): ValidatedThrottleSettings {
         let validatedRequestDelay: number | undefined = undefined;
 
         if (requestDelay !== undefined) {
@@ -221,12 +215,7 @@ export class ConfigValidator {
         maxRetryAttempts?: number,
         baseRetryDelay?: number,
         maxRetryDelay?: number
-    ): {
-        enabled: boolean;
-        maxAttempts: number;
-        baseDelay: number;
-        maxDelay: number;
-    } {
+    ): ValidatedRetrySettings {
         const enabled = enableRetry ?? this.DEFAULT_ENABLE_RETRY;
         const maxAttempts = maxRetryAttempts ?? this.DEFAULT_MAX_RETRY_ATTEMPTS;
         const baseDelay = baseRetryDelay ?? this.DEFAULT_BASE_RETRY_DELAY_MS;

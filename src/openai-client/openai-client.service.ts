@@ -227,7 +227,7 @@ export class OpenAIClientService {
             usage,
             cost,
             model: response.model,
-            finishReason: response.choices[0]?.finish_reason || null,
+            finishReason: response.choices[0]?.finish_reason ?? null,
             raw: response,
             input,
         };
