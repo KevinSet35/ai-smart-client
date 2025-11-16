@@ -13,7 +13,8 @@
         "build": "tsc",
         "prepare": "npm run build",
         "watch": "tsc --watch",
-        "clean": "rm -rf dist"
+        "clean": "rm -rf dist",
+        "example": "tsx src/openai-examples.ts"
     },
     "keywords": [
         "openai",
@@ -31,9 +32,12 @@
     },
     "devDependencies": {
         "@types/node": "^20.0.0",
+        "ts-node": "^10.9.2",
+        "tsx": "^4.20.6",
         "typescript": "^5.0.0"
     },
     "dependencies": {
+        "dotenv": "^17.2.3",
         "zod-to-json-schema": "^3.24.6"
     }
 }
