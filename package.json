@@ -1,0 +1,36 @@
+{
+    "name": "@yourcompany/openai-library",
+    "version": "1.0.0",
+    "description": "OpenAI client library with automatic model selection",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "prepare": "npm run build",
+        "watch": "tsc --watch",
+        "clean": "rm -rf dist"
+    },
+    "keywords": [
+        "openai",
+        "ai",
+        "nestjs",
+        "typescript"
+    ],
+    "author": "Your Name",
+    "license": "MIT",
+    "peerDependencies": {
+        "@nestjs/common": "^10.0.0",
+        "@nestjs/config": "^3.0.0",
+        "openai": "^4.0.0",
+        "zod": "^3.22.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.0.0",
+        "typescript": "^5.0.0"
+    }
+}
