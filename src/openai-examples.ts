@@ -1,8 +1,9 @@
 import "dotenv/config"; // THIS MUST BE FIRST!
 import { z } from "zod";
-import { OpenAIClientService, PromptResponseStatus } from "./openai-client/openai-client.service";
-import { OpenAIModel } from "./openai-client/openai-registry";
-import type { PromptInput, PromptResponse, OpenAIClientConfig } from "./openai-client/openai-client.service";
+import { OpenAIClientService } from "./openai-client/openai-client.service";
+import { OpenAIClientConfig } from "./openai-client/types/config.types";
+import { OpenAIModel } from "./openai-client/config/model-registry";
+import { PromptInput, PromptResponse, PromptResponseStatus } from "./openai-client/types/prompt.types";
 
 /**
  * Example usage class demonstrating various features of OpenAIClientService
@@ -89,10 +90,10 @@ export class OpenAIClientExamples {
     /**
      * Helper method to log input and output
      */
-    private logPromptDetails<T>(
+    private logPromptDetails<TInput, TOutput>(
         exampleName: string,
-        input: PromptInput<T>,
-        response: PromptResponse<T>,
+        input: PromptInput<TInput, TOutput>,
+        response: PromptResponse<TInput, TOutput>,
         schema?: z.ZodType<any>
     ): void {
         console.log(`\n${"=".repeat(80)}`);
@@ -154,7 +155,7 @@ export class OpenAIClientExamples {
      * Example 1: Simple text completion
      */
     async simpleTextCompletion() {
-        const input: PromptInput = {
+        const input: PromptInput<string, string> = {
             input: "What is the capital of France?",
         };
 
@@ -166,7 +167,7 @@ export class OpenAIClientExamples {
      * Example 2: Text completion with custom temperature
      */
     async textCompletionWithCustomTemperature() {
-        const input: PromptInput = {
+        const input: PromptInput<string, string> = {
             input: "Write a creative story about a robot learning to paint.",
             temperature: 1.2,
             maxTokens: 500,
@@ -192,7 +193,7 @@ export class OpenAIClientExamples {
 
         type Person = z.infer<typeof PersonSchema>;
 
-        const input: PromptInput<Person> = {
+        const input: PromptInput<string, Person> = {
             input: "Extract information: John Doe is 25 years old. He works as a software engineer and his email is john@example.com",
             outputSchema: PersonSchema,
         };
@@ -219,7 +220,7 @@ export class OpenAIClientExamples {
 
         type Product = z.infer<typeof ProductSchema>;
 
-        const input: PromptInput<Product> = {
+        const input: PromptInput<string, Product> = {
             input: "Generate a product listing for a premium wireless headphone",
             outputSchema: ProductSchema,
         };
@@ -247,7 +248,7 @@ export class OpenAIClientExamples {
 
         type TaskList = z.infer<typeof TaskListSchema>;
 
-        const input: PromptInput<TaskList> = {
+        const input: PromptInput<string, TaskList> = {
             input: "Generate 5 tasks for a software development sprint focusing on authentication features",
             outputSchema: TaskListSchema,
         };
@@ -266,7 +267,7 @@ export class OpenAIClientExamples {
         console.log("Example 6: Streaming Text Generation");
         console.log("=".repeat(80));
 
-        const input: PromptInput = {
+        const input: PromptInput<string, string> = {
             input: "Write a short story about a time traveler",
             maxTokens: 300,
         };
@@ -318,7 +319,7 @@ export class OpenAIClientExamples {
 
         type Recipe = z.infer<typeof RecipeSchema>;
 
-        const input: PromptInput<Recipe> = {
+        const input: PromptInput<string, Recipe> = {
             input: "Generate a recipe for chocolate chip cookies",
             outputSchema: RecipeSchema,
         };
@@ -359,7 +360,7 @@ export class OpenAIClientExamples {
      * Example 8: Analyze image
      */
     async analyzeImage() {
-        const input: PromptInput = {
+        const input: PromptInput<string, string> = {
             input: "What's in this image? Describe it in detail.",
             model: OpenAIModel.GPT_4O,
             images: ["https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"],
@@ -388,7 +389,7 @@ export class OpenAIClientExamples {
 
         type DiceAnalysis = z.infer<typeof DiceAnalysisSchema>;
 
-        const input: PromptInput<DiceAnalysis> = {
+        const input: PromptInput<string, DiceAnalysis> = {
             input: "Analyze this image of dice. For each die, identify its color, the number showing on top, and its position in the image. Also provide the total count and sum of all dice values.",
             model: OpenAIModel.GPT_4O,
             images: ["https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png"],
@@ -410,7 +411,7 @@ export class OpenAIClientExamples {
         console.log("=".repeat(80));
 
         // First message
-        const input1: PromptInput = {
+        const input1: PromptInput<string, string> = {
             input: "My name is Alice and I love programming.",
         };
 
@@ -436,7 +437,7 @@ export class OpenAIClientExamples {
         }
 
         // Second message with history
-        const input2: PromptInput = {
+        const input2: PromptInput<string, string> = {
             input: "What's my name and what do I love?",
             messages: [
                 { role: "user", content: "My name is Alice and I love programming." },
@@ -485,7 +486,7 @@ export class OpenAIClientExamples {
 
         type StrictData = z.infer<typeof StrictSchema>;
 
-        const input: PromptInput<StrictData> = {
+        const input: PromptInput<string, StrictData> = {
             input: "Generate some random data",
             outputSchema: StrictSchema,
         };
@@ -505,7 +506,7 @@ export class OpenAIClientExamples {
         const inputs = ["Test 1", "Test 2", "Test 3"];
 
         const responses = await Promise.all(
-            inputs.map((input) => this.client.prompt({ input }))
+            inputs.map((input) => this.client.prompt<string, string>({ input }))
         );
 
         responses.forEach((response, index) => {
@@ -533,7 +534,7 @@ export class OpenAIClientExamples {
      * Example 13: Custom system message per request
      */
     async customSystemMessage() {
-        const input: PromptInput = {
+        const input: PromptInput<string, string> = {
             input: "Explain quantum computing",
             systemMessage: "You are a physics professor explaining concepts to undergraduate students. Use simple analogies.",
             temperature: 0.5,
@@ -552,7 +553,7 @@ export class OpenAIClientExamples {
         console.log("=".repeat(80));
 
         // Fast model for simple tasks
-        const fastInput: PromptInput = {
+        const fastInput: PromptInput<string, string> = {
             input: "What is 2+2?",
             model: OpenAIModel.GPT_4O_MINI,
         };
@@ -573,7 +574,7 @@ export class OpenAIClientExamples {
         }
 
         // Powerful model for complex tasks
-        const complexInput: PromptInput = {
+        const complexInput: PromptInput<string, string> = {
             input: "Explain the philosophical implications of artificial consciousness",
             model: OpenAIModel.GPT_4O,
             maxTokens: 500,
@@ -617,7 +618,7 @@ export class OpenAIClientExamples {
 
         const responses = await Promise.all(
             inputs.map((input) =>
-                this.client.prompt({
+                this.client.prompt<string, string>({
                     input,
                     maxTokens: 50,
                 })
