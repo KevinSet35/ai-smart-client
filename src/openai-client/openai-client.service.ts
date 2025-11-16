@@ -9,13 +9,13 @@ import { RateLimitManager } from "./managers/rate-limit.manager";
 import { ThrottleManager } from "./managers/throttle.manager";
 import { OpenAIClientConfig } from "./types/config.types";
 import { PromptInput, PromptResponse, PromptResponseStatus, PromptCost } from "./types/prompt.types";
-import { OpenAIModel } from "./config/model-registry";
-import { ModelRegistry } from "./model-registry.service";
+import { ModelMetadata, OPENAI_MODEL_REGISTRY, OpenAIModel } from "./config/model-registry";
 
 export class OpenAIClientService {
     private readonly logger = new Logger(OpenAIClientService.name);
     private readonly CHARS_PER_TOKEN = 4; // Rough average
     private readonly DEFAULT_ESTIMATED_MAX_TOKENS = 1000;
+    private readonly TOKENS_PER_MILLION = 1_000_000;
 
     private client!: OpenAI;
     private defaultModel!: OpenAIModel;
@@ -31,7 +31,6 @@ export class OpenAIClientService {
     private schemaParser: SchemaParser;
     private rateLimitManager: RateLimitManager;
     private throttleManager: ThrottleManager;
-    private modelRegistry: ModelRegistry;
 
     constructor(config: OpenAIClientConfig) {
         // Initialize validator
@@ -71,7 +70,6 @@ export class OpenAIClientService {
             throttleSettings.useJitter,
             throttleSettings.jitterFactor
         );
-        this.modelRegistry = new ModelRegistry();
     }
 
     /**
@@ -183,7 +181,7 @@ export class OpenAIClientService {
             : undefined;
 
         const cost = usage
-            ? this.modelRegistry.calculateCost(model, usage.promptTokens, usage.completionTokens)
+            ? this.calculateCost(model, usage.promptTokens, usage.completionTokens)
             : undefined;
 
         return {
@@ -321,5 +319,31 @@ export class OpenAIClientService {
         this.rateLimitManager.recordRequest(estimatedTokens);
 
         return fn();
+    }
+
+    /**
+     * Calculate estimated cost for a request
+     */
+    private calculateCost(model: OpenAIModel, inputTokens: number, outputTokens: number): PromptCost {
+        const metadata = this.getModelMetadata(model);
+        const inputCost = (inputTokens / this.TOKENS_PER_MILLION) * metadata.pricing.inputPer1M;
+        const outputCost = (outputTokens / this.TOKENS_PER_MILLION) * metadata.pricing.outputPer1M;
+        const totalCost = inputCost + outputCost;
+
+        return {
+            inputCost,
+            outputCost,
+            totalCost,
+        };
+    }
+
+    private getModelMetadata(model: OpenAIModel): ModelMetadata {
+        const metadata = OPENAI_MODEL_REGISTRY[model];
+
+        if (!metadata) {
+            throw new Error(`Model metadata not found for: ${model}`);
+        }
+
+        return metadata;
     }
 }
