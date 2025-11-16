@@ -1,4 +1,5 @@
 import { ModelMetadata, OPENAI_MODEL_REGISTRY, OpenAIModel, ModelPricing } from "./config/model-registry";
+import { PromptCost } from "./types/prompt.types";
 
 export interface ModelComparison {
     model1: ModelMetadata;
@@ -16,7 +17,24 @@ export interface ModelComparison {
     };
 }
 
+/**
+ * Cost breakdown for token usage
+//  */
+// export interface TokenCost {
+//     /** Cost for input tokens in USD */
+//     inputCost: number;
+//     /** Cost for output tokens in USD */
+//     outputCost: number;
+//     /** Total cost in USD */
+//     totalCost: number;
+// }
+
 export class ModelRegistry {
+    // Constants
+    private readonly TOKENS_PER_MILLION = 1_000_000;
+    private readonly PERCENTAGE_MULTIPLIER = 100;
+    private readonly PRICE_DIVISOR_FOR_AVERAGE = 2;
+
     /**
      * Get metadata for a specific model
      */
@@ -130,8 +148,8 @@ export class ModelRegistry {
 
         // Sort by actual pricing (input + output average)
         candidates.sort((a, b) => {
-            const avgPriceA = (a.pricing.inputPer1M + a.pricing.outputPer1M) / 2;
-            const avgPriceB = (b.pricing.inputPer1M + b.pricing.outputPer1M) / 2;
+            const avgPriceA = (a.pricing.inputPer1M + a.pricing.outputPer1M) / this.PRICE_DIVISOR_FOR_AVERAGE;
+            const avgPriceB = (b.pricing.inputPer1M + b.pricing.outputPer1M) / this.PRICE_DIVISOR_FOR_AVERAGE;
             return avgPriceA - avgPriceB;
         });
 
@@ -141,11 +159,17 @@ export class ModelRegistry {
     /**
      * Calculate estimated cost for a request
      */
-    calculateCost(model: OpenAIModel, inputTokens: number, outputTokens: number): number {
+    calculateCost(model: OpenAIModel, inputTokens: number, outputTokens: number): PromptCost {
         const metadata = this.getModelMetadata(model);
-        const inputCost = (inputTokens / 1_000_000) * metadata.pricing.inputPer1M;
-        const outputCost = (outputTokens / 1_000_000) * metadata.pricing.outputPer1M;
-        return inputCost + outputCost;
+        const inputCost = (inputTokens / this.TOKENS_PER_MILLION) * metadata.pricing.inputPer1M;
+        const outputCost = (outputTokens / this.TOKENS_PER_MILLION) * metadata.pricing.outputPer1M;
+        const totalCost = inputCost + outputCost;
+
+        return {
+            inputCost,
+            outputCost,
+            totalCost,
+        };
     }
 
     /**
@@ -153,8 +177,8 @@ export class ModelRegistry {
      */
     getModelsSortedByPrice(): ModelMetadata[] {
         return Object.values(OPENAI_MODEL_REGISTRY).sort((a, b) => {
-            const avgPriceA = (a.pricing.inputPer1M + a.pricing.outputPer1M) / 2;
-            const avgPriceB = (b.pricing.inputPer1M + b.pricing.outputPer1M) / 2;
+            const avgPriceA = (a.pricing.inputPer1M + a.pricing.outputPer1M) / this.PRICE_DIVISOR_FOR_AVERAGE;
+            const avgPriceB = (b.pricing.inputPer1M + b.pricing.outputPer1M) / this.PRICE_DIVISOR_FOR_AVERAGE;
             return avgPriceA - avgPriceB;
         });
     }
@@ -184,12 +208,12 @@ export class ModelRegistry {
 
         const inputPercentageDifference =
             meta2.pricing.inputPer1M !== 0
-                ? ((inputDifference / meta2.pricing.inputPer1M) * 100)
+                ? (inputDifference / meta2.pricing.inputPer1M) * this.PERCENTAGE_MULTIPLIER
                 : 0;
 
         const outputPercentageDifference =
             meta2.pricing.outputPer1M !== 0
-                ? ((outputDifference / meta2.pricing.outputPer1M) * 100)
+                ? (outputDifference / meta2.pricing.outputPer1M) * this.PERCENTAGE_MULTIPLIER
                 : 0;
 
         return {

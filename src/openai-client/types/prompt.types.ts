@@ -42,6 +42,18 @@ export interface PromptInput<TInput = string, TOutput = string> {
 }
 
 /**
+ * Cost breakdown for the API call
+ */
+export interface PromptCost {
+    /** Cost for input tokens in USD */
+    inputCost: number;
+    /** Cost for output tokens in USD */
+    outputCost: number;
+    /** Total cost in USD */
+    totalCost: number;
+}
+
+/**
  * Response from prompt generation
  */
 export interface PromptResponse<TInput = string, TOutput = string> {
@@ -61,6 +73,8 @@ export interface PromptResponse<TInput = string, TOutput = string> {
         completionTokens: number;
         totalTokens: number;
     };
+    /** Estimated cost of the API call in USD */
+    cost?: PromptCost;
     /** The model used for this completion */
     model: string;
     /** Finish reason */

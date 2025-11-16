@@ -8,8 +8,9 @@ import { SchemaParser } from "./parsers/schema.parser";
 import { RateLimitManager } from "./managers/rate-limit.manager";
 import { ThrottleManager } from "./managers/throttle.manager";
 import { OpenAIClientConfig } from "./types/config.types";
-import { PromptInput, PromptResponse, PromptResponseStatus } from "./types/prompt.types";
+import { PromptInput, PromptResponse, PromptResponseStatus, PromptCost } from "./types/prompt.types";
 import { OpenAIModel } from "./config/model-registry";
+import { ModelRegistry } from "./model-registry.service";
 
 export class OpenAIClientService {
     private readonly logger = new Logger(OpenAIClientService.name);
@@ -30,6 +31,7 @@ export class OpenAIClientService {
     private schemaParser: SchemaParser;
     private rateLimitManager: RateLimitManager;
     private throttleManager: ThrottleManager;
+    private modelRegistry: ModelRegistry;
 
     constructor(config: OpenAIClientConfig) {
         // Initialize validator
@@ -69,6 +71,7 @@ export class OpenAIClientService {
             throttleSettings.useJitter,
             throttleSettings.jitterFactor
         );
+        this.modelRegistry = new ModelRegistry();
     }
 
     /**
@@ -99,7 +102,7 @@ export class OpenAIClientService {
                     input.outputSchema
                 );
 
-                return this.buildPromptResponse(response, content, structuredOutput, input);
+                return this.buildPromptResponse(response, content, structuredOutput, input, model);
             }, this.estimateTokens(input));
         } catch (error) {
             return this.buildErrorResponse<TInput, TOutput>(error, input);
@@ -142,6 +145,7 @@ export class OpenAIClientService {
                     content,
                     structuredOutput,
                     usage: undefined, // Streaming doesn't provide usage
+                    cost: undefined, // Streaming doesn't provide usage, so can't calculate cost
                     model: modelUsed,
                     finishReason,
                     raw: {} as OpenAI.Chat.Completions.ChatCompletion,
@@ -167,20 +171,28 @@ export class OpenAIClientService {
         response: OpenAI.Chat.Completions.ChatCompletion,
         content: TOutput,
         structuredOutput: TOutput | undefined,
-        input: PromptInput<TInput, TOutput>
+        input: PromptInput<TInput, TOutput>,
+        model: OpenAIModel
     ): PromptResponse<TInput, TOutput> {
+        const usage = response.usage
+            ? {
+                promptTokens: response.usage.prompt_tokens,
+                completionTokens: response.usage.completion_tokens,
+                totalTokens: response.usage.total_tokens,
+            }
+            : undefined;
+
+        const cost = usage
+            ? this.modelRegistry.calculateCost(model, usage.promptTokens, usage.completionTokens)
+            : undefined;
+
         return {
             status: PromptResponseStatus.SUCCESS,
             content,
             structuredOutput,
             toolCalls: response.choices[0]?.message?.tool_calls,
-            usage: response.usage
-                ? {
-                    promptTokens: response.usage.prompt_tokens,
-                    completionTokens: response.usage.completion_tokens,
-                    totalTokens: response.usage.total_tokens,
-                }
-                : undefined,
+            usage,
+            cost,
             model: response.model,
             finishReason: response.choices[0]?.finish_reason || null,
             raw: response,
