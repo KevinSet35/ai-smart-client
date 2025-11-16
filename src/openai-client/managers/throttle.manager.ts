@@ -1,3 +1,5 @@
+import { DelayUtils } from "../utils/delay.utils";
+
 export class ThrottleManager {
     private readonly DEFAULT_JITTER_FACTOR = 0.3;
     private lastRequestTime = 0;
@@ -19,32 +21,14 @@ export class ThrottleManager {
 
         if (timeSinceLastRequest < this.requestDelay) {
             const remainingDelay = this.requestDelay - timeSinceLastRequest;
-            const actualDelay = this.calculateDelay(remainingDelay);
-            await this.sleep(actualDelay);
+            const actualDelay = DelayUtils.calculateDelayWithJitter(
+                remainingDelay,
+                this.useJitter,
+                this.jitterFactor
+            );
+            await DelayUtils.sleep(actualDelay);
         }
 
         this.lastRequestTime = Date.now();
-    }
-
-    /**
-     * Calculate delay with optional jitter
-     */
-    private calculateDelay(baseDelay: number): number {
-        if (!this.useJitter) {
-            return baseDelay;
-        }
-
-        // Add random jitter: baseDelay * (1 ± jitterFactor)
-        const jitterAmount = baseDelay * this.jitterFactor;
-        const randomJitter = (Math.random() * 2 - 1) * jitterAmount;
-
-        return Math.max(0, baseDelay + randomJitter);
-    }
-
-    /**
-     * Sleep for a specified duration
-     */
-    private sleep(ms: number): Promise<void> {
-        return new Promise((resolve) => setTimeout(resolve, ms));
     }
 }

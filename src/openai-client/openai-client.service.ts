@@ -233,6 +233,7 @@ export class OpenAIClientService {
         };
     }
 
+
     /**
      * Build an error response
      */
@@ -288,6 +289,7 @@ export class OpenAIClientService {
             input,
         };
     }
+
 
     /**
      * Process streaming response

@@ -1,5 +1,6 @@
 import { Logger } from "@nestjs/common";
 import { HTTP_STATUS, ERROR_KEYWORDS, HTTP_STATUS_STRINGS } from "../constants/error.constants";
+import { DelayUtils } from "../utils/delay.utils";
 
 export class RetryManager {
     private readonly logger = new Logger(RetryManager.name);
@@ -42,11 +43,11 @@ export class RetryManager {
 
                 // Check if we have attempts left
                 if (attempt < this.maxAttempts - 1) {
-                    const delay = this.calculateDelay(attempt);
+                    const delay = DelayUtils.calculateExponentialBackoff(attempt, this.baseDelay, this.maxDelay);
                     this.logger.warn(
                         `Request failed (attempt ${attempt + 1}/${this.maxAttempts}): ${this.getErrorMessage(error)}. Retrying in ${delay}ms...`
                     );
-                    await this.sleep(delay);
+                    await DelayUtils.sleep(delay);
                 } else {
                     this.logger.error(
                         `Request failed after ${this.maxAttempts} attempts: ${this.getErrorMessage(error)}`
@@ -116,29 +117,6 @@ export class RetryManager {
         // - 404 (Not Found) - resource doesn't exist
         // - Validation errors - schema mismatch
         return false;
-    }
-
-    /**
-     * Calculate exponential backoff delay with jitter
-     */
-    private calculateDelay(attempt: number): number {
-        // Exponential backoff: baseDelay * 2^attempt
-        const exponentialDelay = this.baseDelay * Math.pow(2, attempt);
-
-        // Cap at maxDelay
-        const cappedDelay = Math.min(exponentialDelay, this.maxDelay);
-
-        // Add jitter (random value between 0 and 25% of the delay)
-        const jitter = Math.random() * 0.25 * cappedDelay;
-
-        return Math.floor(cappedDelay + jitter);
-    }
-
-    /**
-     * Sleep for specified milliseconds
-     */
-    private sleep(ms: number): Promise<void> {
-        return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     /**
