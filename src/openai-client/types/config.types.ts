@@ -35,4 +35,12 @@ export interface OpenAIClientConfig {
     useJitter?: boolean;
     /** Maximum jitter as percentage of requestDelay (0-1). Defaults to 0.3 (30%) */
     jitterFactor?: number;
+    /** Enable retry logic with exponential backoff. Defaults to true */
+    enableRetry?: boolean;
+    /** Maximum number of retry attempts. Defaults to 3 */
+    maxRetryAttempts?: number;
+    /** Base delay in milliseconds for exponential backoff. Defaults to 1000 (1s) */
+    baseRetryDelay?: number;
+    /** Maximum delay in milliseconds for exponential backoff. Defaults to 60000 (60s) */
+    maxRetryDelay?: number;
 }

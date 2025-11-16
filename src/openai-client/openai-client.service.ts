@@ -7,9 +7,11 @@ import { OutputParser } from "./parsers/output.parser";
 import { SchemaParser } from "./parsers/schema.parser";
 import { RateLimitManager } from "./managers/rate-limit.manager";
 import { ThrottleManager } from "./managers/throttle.manager";
+import { RetryManager } from "./managers/retry.manager";
 import { OpenAIClientConfig } from "./types/config.types";
 import { PromptInput, PromptResponse, PromptResponseStatus, PromptCost } from "./types/prompt.types";
 import { ModelMetadata, OPENAI_MODEL_REGISTRY, OpenAIModel } from "./config/model-registry";
+import { HTTP_STATUS_STRINGS, ERROR_KEYWORDS, DEFAULT_ERROR_MESSAGES } from "./constants/error.constants";
 
 export class OpenAIClientService {
     private readonly logger = new Logger(OpenAIClientService.name);
@@ -31,6 +33,7 @@ export class OpenAIClientService {
     private schemaParser: SchemaParser;
     private rateLimitManager: RateLimitManager;
     private throttleManager: ThrottleManager;
+    private retryManager: RetryManager;
 
     constructor(config: OpenAIClientConfig) {
         // Initialize validator
@@ -49,6 +52,12 @@ export class OpenAIClientService {
             config.useJitter,
             config.jitterFactor
         );
+        const retrySettings = this.configValidator.validateRetrySettings(
+            config.enableRetry,
+            config.maxRetryAttempts,
+            config.baseRetryDelay,
+            config.maxRetryDelay
+        );
 
         // Initialize OpenAI client
         this.client = new OpenAI({
@@ -56,7 +65,7 @@ export class OpenAIClientService {
             baseURL: config.baseURL,
             organization: config.organization,
             timeout: config.timeout ?? this.configValidator.getDefaultTimeout(),
-            maxRetries: config.maxRetries ?? this.configValidator.getDefaultMaxRetries(),
+            maxRetries: 0, // Disable built-in retries, we handle them ourselves
         });
 
         // Initialize managers and helpers
@@ -70,6 +79,12 @@ export class OpenAIClientService {
             throttleSettings.useJitter,
             throttleSettings.jitterFactor
         );
+        this.retryManager = new RetryManager(
+            retrySettings.enabled,
+            retrySettings.maxAttempts,
+            retrySettings.baseDelay,
+            retrySettings.maxDelay
+        );
     }
 
     /**
@@ -78,33 +93,43 @@ export class OpenAIClientService {
     async prompt<TInput = string, TOutput = string>(
         input: PromptInput<TInput, TOutput>
     ): Promise<PromptResponse<TInput, TOutput>> {
-        try {
-            return await this.executeWithRateLimiting(async () => {
-                const model = this.getModelToUse(input);
-                const messages = this.messageBuilder.buildMessages(input, model, this.systemMessage);
-                const requestParams = this.requestBuilder.buildRequestParams(
-                    input,
-                    model,
-                    messages,
-                    this.defaultTemperature,
-                    this.maxTokens
-                );
+        return await this.retryManager.executeWithRetry(
+            async () => {
+                try {
+                    return await this.executeWithRateLimiting(async () => {
+                        const model = this.getModelToUse(input);
+                        const messages = this.messageBuilder.buildMessages(input, model, this.systemMessage);
+                        const requestParams = this.requestBuilder.buildRequestParams(
+                            input,
+                            model,
+                            messages,
+                            this.defaultTemperature,
+                            this.maxTokens
+                        );
 
-                this.logger.debug(`Making OpenAI request with model: ${model}`);
-                const response = await this.client.chat.completions.create(requestParams);
+                        this.logger.debug(`Making OpenAI request with model: ${model}`);
+                        const response = await this.client.chat.completions.create(requestParams);
 
-                this.rateLimitManager.recordRequest(response.usage?.total_tokens);
+                        this.rateLimitManager.recordRequest(response.usage?.total_tokens);
 
-                const { content, structuredOutput } = this.outputParser.parseAndValidateOutput(
-                    response.choices[0]?.message?.content || "",
-                    input.outputSchema
-                );
+                        const { content, structuredOutput } = this.outputParser.parseAndValidateOutput(
+                            response.choices[0]?.message?.content || "",
+                            input.outputSchema
+                        );
 
-                return this.buildPromptResponse(response, content, structuredOutput, input, model);
-            }, this.estimateTokens(input));
-        } catch (error) {
-            return this.buildErrorResponse<TInput, TOutput>(error, input);
-        }
+                        return this.buildPromptResponse(response, content, structuredOutput, input, model);
+                    }, this.estimateTokens(input));
+                } catch (error) {
+                    // Check if error is retriable
+                    if (this.retryManager.isRetriableError(error)) {
+                        throw error; // Let retry manager handle it
+                    }
+                    // Non-retriable error, return error response
+                    return this.buildErrorResponse<TInput, TOutput>(error, input);
+                }
+            },
+            (error) => this.buildErrorResponse<TInput, TOutput>(error, input)
+        );
     }
 
     /**
@@ -114,45 +139,55 @@ export class OpenAIClientService {
         input: PromptInput<TInput, TOutput>,
         onChunk: (chunk: string) => void
     ): Promise<PromptResponse<TInput, TOutput>> {
-        try {
-            return await this.executeWithRateLimiting(async () => {
-                const model = this.getModelToUse(input);
-                const messages = this.messageBuilder.buildMessages(input, model, this.systemMessage);
-                const requestParams = this.requestBuilder.buildStreamingRequestParams(
-                    input,
-                    model,
-                    messages,
-                    this.defaultTemperature,
-                    this.maxTokens
-                );
+        return await this.retryManager.executeWithRetry(
+            async () => {
+                try {
+                    return await this.executeWithRateLimiting(async () => {
+                        const model = this.getModelToUse(input);
+                        const messages = this.messageBuilder.buildMessages(input, model, this.systemMessage);
+                        const requestParams = this.requestBuilder.buildStreamingRequestParams(
+                            input,
+                            model,
+                            messages,
+                            this.defaultTemperature,
+                            this.maxTokens
+                        );
 
-                this.logger.debug(`Making OpenAI streaming request with model: ${model}`);
-                const stream = await this.client.chat.completions.create(requestParams);
+                        this.logger.debug(`Making OpenAI streaming request with model: ${model}`);
+                        const stream = await this.client.chat.completions.create(requestParams);
 
-                const { fullContent, finishReason, modelUsed } = await this.processStream(stream, onChunk);
+                        const { fullContent, finishReason, modelUsed } = await this.processStream(stream, onChunk);
 
-                this.rateLimitManager.recordRequest(this.estimateTokens(input));
+                        this.rateLimitManager.recordRequest(this.estimateTokens(input));
 
-                const { content, structuredOutput } = this.outputParser.parseAndValidateOutput(
-                    fullContent,
-                    input.outputSchema
-                );
+                        const { content, structuredOutput } = this.outputParser.parseAndValidateOutput(
+                            fullContent,
+                            input.outputSchema
+                        );
 
-                return {
-                    status: PromptResponseStatus.SUCCESS,
-                    content,
-                    structuredOutput,
-                    usage: undefined, // Streaming doesn't provide usage
-                    cost: undefined, // Streaming doesn't provide usage, so can't calculate cost
-                    model: modelUsed,
-                    finishReason,
-                    raw: {} as OpenAI.Chat.Completions.ChatCompletion,
-                    input,
-                };
-            }, this.estimateTokens(input));
-        } catch (error) {
-            return this.buildErrorResponse<TInput, TOutput>(error, input);
-        }
+                        return {
+                            status: PromptResponseStatus.SUCCESS,
+                            content,
+                            structuredOutput,
+                            usage: undefined, // Streaming doesn't provide usage
+                            cost: undefined, // Streaming doesn't provide usage, so can't calculate cost
+                            model: modelUsed,
+                            finishReason,
+                            raw: {} as OpenAI.Chat.Completions.ChatCompletion,
+                            input,
+                        };
+                    }, this.estimateTokens(input));
+                } catch (error) {
+                    // Check if error is retriable
+                    if (this.retryManager.isRetriableError(error)) {
+                        throw error; // Let retry manager handle it
+                    }
+                    // Non-retriable error, return error response
+                    return this.buildErrorResponse<TInput, TOutput>(error, input);
+                }
+            },
+            (error) => this.buildErrorResponse<TInput, TOutput>(error, input)
+        );
     }
 
     /**
@@ -206,30 +241,36 @@ export class OpenAIClientService {
         input: PromptInput<TInput, TOutput>
     ): PromptResponse<TInput, TOutput> {
         let status = PromptResponseStatus.UNKNOWN_ERROR;
-        let errorMessage = "An unknown error occurred";
+        let errorMessage: string = DEFAULT_ERROR_MESSAGES.UNKNOWN;
 
         if (error instanceof Error) {
             errorMessage = error.message;
 
             // Determine the type of error
-            if (errorMessage.includes("does not match expected schema")) {
+            if (errorMessage.includes(ERROR_KEYWORDS.SCHEMA_MISMATCH)) {
                 status = PromptResponseStatus.VALIDATION_ERROR;
-            } else if (errorMessage.includes("rate limit") || errorMessage.includes("429")) {
+            } else if (
+                errorMessage.includes(ERROR_KEYWORDS.RATE_LIMIT) ||
+                errorMessage.includes(HTTP_STATUS_STRINGS.TOO_MANY_REQUESTS)
+            ) {
                 status = PromptResponseStatus.RATE_LIMIT_ERROR;
-            } else if (errorMessage.includes("timeout") || errorMessage.includes("timed out")) {
+            } else if (
+                errorMessage.includes(ERROR_KEYWORDS.TIMEOUT) ||
+                errorMessage.includes(ERROR_KEYWORDS.TIMED_OUT)
+            ) {
                 status = PromptResponseStatus.TIMEOUT_ERROR;
             } else if (
-                errorMessage.includes("network") ||
-                errorMessage.includes("ECONNREFUSED") ||
-                errorMessage.includes("ENOTFOUND")
+                errorMessage.includes(ERROR_KEYWORDS.NETWORK) ||
+                errorMessage.includes(ERROR_KEYWORDS.ECONNREFUSED) ||
+                errorMessage.includes(ERROR_KEYWORDS.ENOTFOUND)
             ) {
                 status = PromptResponseStatus.NETWORK_ERROR;
             } else if (
-                errorMessage.includes("API") ||
-                errorMessage.includes("400") ||
-                errorMessage.includes("401") ||
-                errorMessage.includes("403") ||
-                errorMessage.includes("500")
+                errorMessage.includes(ERROR_KEYWORDS.API) ||
+                errorMessage.includes(HTTP_STATUS_STRINGS.BAD_REQUEST) ||
+                errorMessage.includes(HTTP_STATUS_STRINGS.UNAUTHORIZED) ||
+                errorMessage.includes(HTTP_STATUS_STRINGS.FORBIDDEN) ||
+                errorMessage.includes(HTTP_STATUS_STRINGS.INTERNAL_SERVER_ERROR)
             ) {
                 status = PromptResponseStatus.API_ERROR;
             }

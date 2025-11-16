@@ -30,6 +30,16 @@ export class ConfigValidator {
     private readonly MIN_JITTER_FACTOR = 0;
     private readonly MAX_JITTER_FACTOR = 1;
 
+    // Retry Configuration
+    private readonly DEFAULT_ENABLE_RETRY = true;
+    private readonly DEFAULT_MAX_RETRY_ATTEMPTS = 3;
+    private readonly DEFAULT_BASE_RETRY_DELAY_MS = 1000;
+    private readonly DEFAULT_MAX_RETRY_DELAY_MS = 60000;
+    private readonly MIN_RETRY_ATTEMPTS = 1;
+    private readonly MAX_RETRY_ATTEMPTS = 10;
+    private readonly MIN_BASE_RETRY_DELAY_MS = 100;
+    private readonly MAX_BASE_RETRY_DELAY_MS = 10000;
+
     /**
      * Validate and get the API key
      */
@@ -201,5 +211,48 @@ export class ConfigValidator {
      */
     getDefaultMaxRetries(): number {
         return this.DEFAULT_MAX_RETRIES;
+    }
+
+    /**
+     * Validate retry settings
+     */
+    validateRetrySettings(
+        enableRetry?: boolean,
+        maxRetryAttempts?: number,
+        baseRetryDelay?: number,
+        maxRetryDelay?: number
+    ): {
+        enabled: boolean;
+        maxAttempts: number;
+        baseDelay: number;
+        maxDelay: number;
+    } {
+        const enabled = enableRetry ?? this.DEFAULT_ENABLE_RETRY;
+        const maxAttempts = maxRetryAttempts ?? this.DEFAULT_MAX_RETRY_ATTEMPTS;
+        const baseDelay = baseRetryDelay ?? this.DEFAULT_BASE_RETRY_DELAY_MS;
+        const maxDelay = maxRetryDelay ?? this.DEFAULT_MAX_RETRY_DELAY_MS;
+
+        if (maxAttempts < this.MIN_RETRY_ATTEMPTS || maxAttempts > this.MAX_RETRY_ATTEMPTS) {
+            throw new Error(
+                `maxRetryAttempts must be between ${this.MIN_RETRY_ATTEMPTS} and ${this.MAX_RETRY_ATTEMPTS}`
+            );
+        }
+
+        if (baseDelay < this.MIN_BASE_RETRY_DELAY_MS || baseDelay > this.MAX_BASE_RETRY_DELAY_MS) {
+            throw new Error(
+                `baseRetryDelay must be between ${this.MIN_BASE_RETRY_DELAY_MS}ms and ${this.MAX_BASE_RETRY_DELAY_MS}ms`
+            );
+        }
+
+        if (maxDelay < baseDelay) {
+            throw new Error("maxRetryDelay must be greater than or equal to baseRetryDelay");
+        }
+
+        return {
+            enabled,
+            maxAttempts,
+            baseDelay,
+            maxDelay,
+        };
     }
 }
