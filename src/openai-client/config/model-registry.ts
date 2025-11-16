@@ -33,6 +33,13 @@ export enum OpenAIModel {
     O1_2024_12_17 = "o1-2024-12-17",
 }
 
+export interface ModelPricing {
+    /** Price per 1M input tokens in USD */
+    inputPer1M: number;
+    /** Price per 1M output tokens in USD */
+    outputPer1M: number;
+}
+
 export interface ModelMetadata {
     // The exact model identifier to use in API calls
     model: OpenAIModel;
@@ -48,6 +55,8 @@ export interface ModelMetadata {
     tier: ModelTier;
     // Relative cost tier for API usage
     pricingTier: PricingTier;
+    // Actual pricing in USD per 1M tokens
+    pricing: ModelPricing;
     // Whether the model can process image inputs
     supportsVision: boolean;
     // Whether the model supports function/tool calling
@@ -60,6 +69,13 @@ export interface ModelMetadata {
     recommendedFor: string[];
 }
 
+/**
+ * OpenAI Model Registry
+ * 
+ * Last Updated: 2025-11-16
+ * Source: https://platform.openai.com/docs/models
+ * Pricing: https://openai.com/api/pricing/
+ */
 export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
     // GPT-3.5 Models
     [OpenAIModel.GPT_3_5_TURBO]: {
@@ -70,6 +86,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 16385,
         tier: ModelTier.GPT_3_5,
         pricingTier: PricingTier.LOW,
+        pricing: {
+            inputPer1M: 0.50,
+            outputPer1M: 1.50,
+        },
         supportsVision: false,
         supportsFunctionCalling: true,
         knowledgeCutoff: "September 2021",
@@ -83,6 +103,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 16385,
         tier: ModelTier.GPT_3_5,
         pricingTier: PricingTier.LOW,
+        pricing: {
+            inputPer1M: 0.50,
+            outputPer1M: 1.50,
+        },
         supportsVision: false,
         supportsFunctionCalling: true,
         knowledgeCutoff: "September 2021",
@@ -99,6 +123,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 8192,
         tier: ModelTier.GPT_4,
         pricingTier: PricingTier.VERY_HIGH,
+        pricing: {
+            inputPer1M: 30.00,
+            outputPer1M: 60.00,
+        },
         supportsVision: false,
         supportsFunctionCalling: true,
         knowledgeCutoff: "September 2021",
@@ -114,6 +142,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 128000,
         tier: ModelTier.GPT_4_TURBO,
         pricingTier: PricingTier.HIGH,
+        pricing: {
+            inputPer1M: 10.00,
+            outputPer1M: 30.00,
+        },
         supportsVision: true,
         supportsFunctionCalling: true,
         knowledgeCutoff: "December 2023",
@@ -127,6 +159,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 128000,
         tier: ModelTier.GPT_4_TURBO,
         pricingTier: PricingTier.HIGH,
+        pricing: {
+            inputPer1M: 10.00,
+            outputPer1M: 30.00,
+        },
         supportsVision: true,
         supportsFunctionCalling: true,
         knowledgeCutoff: "December 2023",
@@ -140,6 +176,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 128000,
         tier: ModelTier.GPT_4_TURBO,
         pricingTier: PricingTier.HIGH,
+        pricing: {
+            inputPer1M: 10.00,
+            outputPer1M: 30.00,
+        },
         supportsVision: true,
         supportsFunctionCalling: true,
         knowledgeCutoff: "December 2023",
@@ -156,6 +196,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 128000,
         tier: ModelTier.GPT_4O,
         pricingTier: PricingTier.MEDIUM,
+        pricing: {
+            inputPer1M: 2.50,
+            outputPer1M: 10.00,
+        },
         supportsVision: true,
         supportsFunctionCalling: true,
         knowledgeCutoff: "October 2023",
@@ -169,6 +213,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 128000,
         tier: ModelTier.GPT_4O,
         pricingTier: PricingTier.MEDIUM,
+        pricing: {
+            inputPer1M: 5.00,
+            outputPer1M: 15.00,
+        },
         supportsVision: true,
         supportsFunctionCalling: true,
         knowledgeCutoff: "October 2023",
@@ -183,6 +231,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 128000,
         tier: ModelTier.GPT_4O,
         pricingTier: PricingTier.MEDIUM,
+        pricing: {
+            inputPer1M: 2.50,
+            outputPer1M: 10.00,
+        },
         supportsVision: true,
         supportsFunctionCalling: true,
         knowledgeCutoff: "October 2023",
@@ -197,6 +249,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 128000,
         tier: ModelTier.GPT_4O,
         pricingTier: PricingTier.LOW,
+        pricing: {
+            inputPer1M: 0.15,
+            outputPer1M: 0.60,
+        },
         supportsVision: true,
         supportsFunctionCalling: true,
         knowledgeCutoff: "October 2023",
@@ -210,6 +266,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 128000,
         tier: ModelTier.GPT_4O,
         pricingTier: PricingTier.LOW,
+        pricing: {
+            inputPer1M: 0.15,
+            outputPer1M: 0.60,
+        },
         supportsVision: true,
         supportsFunctionCalling: true,
         knowledgeCutoff: "October 2023",
@@ -226,6 +286,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 128000,
         tier: ModelTier.O1,
         pricingTier: PricingTier.VERY_HIGH,
+        pricing: {
+            inputPer1M: 15.00,
+            outputPer1M: 60.00,
+        },
         supportsVision: true,
         supportsFunctionCalling: false,
         knowledgeCutoff: "October 2023",
@@ -240,6 +304,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 128000,
         tier: ModelTier.O1,
         pricingTier: PricingTier.VERY_HIGH,
+        pricing: {
+            inputPer1M: 15.00,
+            outputPer1M: 60.00,
+        },
         supportsVision: true,
         supportsFunctionCalling: false,
         knowledgeCutoff: "October 2023",
@@ -254,6 +322,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 128000,
         tier: ModelTier.O1,
         pricingTier: PricingTier.HIGH,
+        pricing: {
+            inputPer1M: 3.00,
+            outputPer1M: 12.00,
+        },
         supportsVision: true,
         supportsFunctionCalling: false,
         knowledgeCutoff: "October 2023",
@@ -268,6 +340,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 128000,
         tier: ModelTier.O1,
         pricingTier: PricingTier.HIGH,
+        pricing: {
+            inputPer1M: 3.00,
+            outputPer1M: 12.00,
+        },
         supportsVision: true,
         supportsFunctionCalling: false,
         knowledgeCutoff: "October 2023",
@@ -282,6 +358,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 200000,
         tier: ModelTier.O1,
         pricingTier: PricingTier.VERY_HIGH,
+        pricing: {
+            inputPer1M: 15.00,
+            outputPer1M: 60.00,
+        },
         supportsVision: true,
         supportsFunctionCalling: false,
         knowledgeCutoff: "October 2023",
@@ -296,6 +376,10 @@ export const OPENAI_MODEL_REGISTRY: Record<OpenAIModel, ModelMetadata> = {
         contextWindow: 200000,
         tier: ModelTier.O1,
         pricingTier: PricingTier.VERY_HIGH,
+        pricing: {
+            inputPer1M: 15.00,
+            outputPer1M: 60.00,
+        },
         supportsVision: true,
         supportsFunctionCalling: false,
         knowledgeCutoff: "October 2023",
