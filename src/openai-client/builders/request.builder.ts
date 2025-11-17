@@ -56,7 +56,7 @@ export class RequestBuilder {
     /**
      * Add structured output configuration to request params
      */
-    private addStructuredOutput<T>(
+    private addStructuredOutput(
         requestParams:
             | OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming
             | OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming,

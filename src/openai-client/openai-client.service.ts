@@ -290,7 +290,6 @@ export class OpenAIClientService {
         };
     }
 
-
     /**
      * Process streaming response
      */

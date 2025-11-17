@@ -4,6 +4,7 @@ import { OpenAIClientService } from "./openai-client/openai-client.service";
 import { OpenAIClientConfig } from "./openai-client/types/config.types";
 import { OpenAIModel } from "./openai-client/config/model-registry";
 import { PromptInput, PromptResponse, PromptResponseStatus } from "./openai-client/types/prompt.types";
+import OpenAI from "openai";
 
 /**
  * Example usage class demonstrating various features of OpenAIClientService
@@ -639,6 +640,573 @@ export class OpenAIClientExamples {
         console.log("\n" + "=".repeat(80) + "\n");
     }
 
+    // Add this after the "Advanced Usage" section and before "Run All Examples"
+
+    // ==================== Function Calling (Tools) ====================
+
+    /**
+     * Example 16: Basic function calling
+     */
+    async basicFunctionCalling() {
+        console.log("\n" + "=".repeat(80));
+        console.log("Example 16: Basic Function Calling");
+        console.log("=".repeat(80));
+
+        // Define tools
+        const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+            {
+                type: "function",
+                function: {
+                    name: "get_weather",
+                    description: "Get the current weather for a location",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            location: {
+                                type: "string",
+                                description: "The city and state, e.g. San Francisco, CA",
+                            },
+                            unit: {
+                                type: "string",
+                                enum: ["celsius", "fahrenheit"],
+                                description: "The temperature unit",
+                            },
+                        },
+                        required: ["location"],
+                    },
+                },
+            },
+        ];
+
+        // Implement the function
+        const getWeather = (location: string, unit: string = "fahrenheit"): string => {
+            const weatherData = {
+                location,
+                temperature: unit === "celsius" ? 22 : 72,
+                unit,
+                condition: "sunny",
+                humidity: 65,
+            };
+            return JSON.stringify(weatherData);
+        };
+
+        const availableFunctions: Record<string, (...args: any[]) => string> = {
+            get_weather: getWeather,
+        };
+
+        const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+
+        // Initial request
+        const input: PromptInput<string, string> = {
+            input: "What's the weather like in Boston?",
+            tools,
+            toolChoice: "auto",
+            messages,
+        };
+
+        console.log("\n📥 INPUT:");
+        console.log(JSON.stringify({
+            input: input.input,
+            tools: `${tools.length} tool(s) defined`,
+            toolChoice: input.toolChoice,
+        }, null, 2));
+
+        let response = await this.client.prompt(input);
+
+        console.log("\n📤 INITIAL RESPONSE:");
+        console.log(JSON.stringify({
+            status: response.status,
+            toolCalls: response.toolCalls?.map(tc => ({
+                function: tc.function.name,
+                arguments: tc.function.arguments,
+            })),
+        }, null, 2));
+
+        // Handle tool calls
+        if (response.status === PromptResponseStatus.SUCCESS && response.toolCalls && response.toolCalls.length > 0) {
+            console.log("\n🔧 EXECUTING FUNCTIONS:");
+
+            // Add assistant's response to conversation
+            messages.push({
+                role: "assistant",
+                content: response.raw.choices[0].message.content,
+                tool_calls: response.toolCalls,
+            });
+
+            // Execute each tool call
+            for (const toolCall of response.toolCalls) {
+                const functionName = toolCall.function.name;
+                const functionArgs = JSON.parse(toolCall.function.arguments);
+
+                console.log(`\n  → Calling ${functionName}:`, functionArgs);
+
+                const functionToCall = availableFunctions[functionName];
+                const functionResponse = functionToCall(...Object.values(functionArgs));
+
+                console.log(`  ← Result:`, JSON.parse(functionResponse));
+
+                // Add function result to conversation
+                messages.push({
+                    role: "tool",
+                    tool_call_id: toolCall.id,
+                    content: functionResponse,
+                });
+            }
+
+            // Get final response with function results
+            const finalInput: PromptInput<string, string> = {
+                input: input.input,
+                tools,
+                messages,
+            };
+
+            const finalResponse = await this.client.prompt(finalInput);
+
+            console.log("\n📤 FINAL RESPONSE:");
+            console.log(JSON.stringify({
+                status: finalResponse.status,
+                content: finalResponse.content,
+                usage: finalResponse.usage,
+                cost: finalResponse.cost,
+            }, null, 2));
+
+            if (finalResponse.status === PromptResponseStatus.SUCCESS) {
+                console.log("\n✅ SUCCESS - Function calling completed");
+            } else {
+                console.log(`\n❌ ERROR: ${finalResponse.status}`);
+            }
+        } else {
+            console.log("\n⚠️  No tool calls made");
+        }
+
+        console.log("=".repeat(80) + "\n");
+    }
+
+    /**
+     * Example 17: Multiple function calls in one request
+     */
+    async multipleFunctionCalls() {
+        console.log("\n" + "=".repeat(80));
+        console.log("Example 17: Multiple Function Calls");
+        console.log("=".repeat(80));
+
+        // Define multiple tools
+        const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+            {
+                type: "function",
+                function: {
+                    name: "get_weather",
+                    description: "Get the current weather for a location",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            location: { type: "string" },
+                            unit: { type: "string", enum: ["celsius", "fahrenheit"] },
+                        },
+                        required: ["location"],
+                    },
+                },
+            },
+            {
+                type: "function",
+                function: {
+                    name: "search_database",
+                    description: "Search for records in the database",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            query: { type: "string" },
+                            limit: { type: "number" },
+                        },
+                        required: ["query"],
+                    },
+                },
+            },
+            {
+                type: "function",
+                function: {
+                    name: "get_user_info",
+                    description: "Get user information by user ID",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            userId: { type: "string" },
+                        },
+                        required: ["userId"],
+                    },
+                },
+            },
+        ];
+
+        // Implement functions
+        const getWeather = (location: string, unit: string = "fahrenheit"): string => {
+            return JSON.stringify({
+                location,
+                temperature: unit === "celsius" ? 22 : 72,
+                unit,
+                condition: "partly cloudy",
+            });
+        };
+
+        const searchDatabase = (query: string, limit: number = 10): string => {
+            return JSON.stringify({
+                results: [
+                    { id: 1, title: `Result for: ${query}`, relevance: 0.95 },
+                    { id: 2, title: `Another match: ${query}`, relevance: 0.87 },
+                ].slice(0, limit),
+                total: 2,
+            });
+        };
+
+        const getUserInfo = (userId: string): string => {
+            return JSON.stringify({
+                userId,
+                name: "Alice Johnson",
+                email: "alice@example.com",
+                accountType: "premium",
+            });
+        };
+
+        const availableFunctions: Record<string, (...args: any[]) => string> = {
+            get_weather: getWeather,
+            search_database: searchDatabase,
+            get_user_info: getUserInfo,
+        };
+
+        const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+
+        const input: PromptInput<string, string> = {
+            input: "What's the weather in New York? Also search our database for 'quarterly reports' and get info for user 'user123'",
+            tools,
+            toolChoice: "auto",
+            messages,
+        };
+
+        console.log("\n📥 INPUT:");
+        console.log(JSON.stringify({
+            input: input.input,
+            tools: tools.map(t => t.function.name),
+        }, null, 2));
+
+        let response = await this.client.prompt(input);
+        let iterationCount = 0;
+        const maxIterations = 3;
+
+        // Handle multiple rounds of function calling
+        while (
+            response.status === PromptResponseStatus.SUCCESS &&
+            response.toolCalls &&
+            response.toolCalls.length > 0 &&
+            iterationCount < maxIterations
+        ) {
+            iterationCount++;
+            console.log(`\n🔧 FUNCTION CALLING ROUND ${iterationCount}:`);
+            console.log(`   Tool calls: ${response.toolCalls.length}`);
+
+            // Add assistant's response to conversation
+            messages.push({
+                role: "assistant",
+                content: response.raw.choices[0].message.content,
+                tool_calls: response.toolCalls,
+            });
+
+            // Execute each tool call
+            for (const toolCall of response.toolCalls) {
+                const functionName = toolCall.function.name;
+                const functionArgs = JSON.parse(toolCall.function.arguments);
+
+                console.log(`\n  → ${functionName}(${JSON.stringify(functionArgs)})`);
+
+                const functionToCall = availableFunctions[functionName];
+                if (!functionToCall) {
+                    throw new Error(`Function ${functionName} not found`);
+                }
+
+                const functionResponse = functionToCall(...Object.values(functionArgs));
+                console.log(`  ← ${functionResponse}`);
+
+                // Add function result to conversation
+                messages.push({
+                    role: "tool",
+                    tool_call_id: toolCall.id,
+                    content: functionResponse,
+                });
+            }
+
+            // Get next response
+            response = await this.client.prompt({
+                input: input.input,
+                tools,
+                messages,
+            });
+        }
+
+        console.log("\n📤 FINAL RESPONSE:");
+        console.log(JSON.stringify({
+            status: response.status,
+            content: response.content,
+            usage: response.usage,
+            cost: response.cost,
+            totalIterations: iterationCount,
+        }, null, 2));
+
+        if (response.status === PromptResponseStatus.SUCCESS) {
+            console.log("\n✅ SUCCESS - Multiple function calls completed");
+        } else {
+            console.log(`\n❌ ERROR: ${response.status}`);
+        }
+
+        console.log("=".repeat(80) + "\n");
+    }
+
+    /**
+     * Example 18: Function calling with structured output
+     */
+    async functionCallingWithStructuredOutput() {
+        console.log("\n" + "=".repeat(80));
+        console.log("Example 18: Function Calling with Structured Output");
+        console.log("=".repeat(80));
+
+        // Define schema for final output
+        const WeatherReportSchema = z.object({
+            location: z.string(),
+            currentTemp: z.number(),
+            unit: z.string(),
+            condition: z.string(),
+            summary: z.string(),
+        });
+
+        type WeatherReport = z.infer<typeof WeatherReportSchema>;
+
+        // Define tool
+        const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+            {
+                type: "function",
+                function: {
+                    name: "get_weather",
+                    description: "Get the current weather for a location",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            location: { type: "string" },
+                            unit: { type: "string", enum: ["celsius", "fahrenheit"] },
+                        },
+                        required: ["location"],
+                    },
+                },
+            },
+        ];
+
+        const getWeather = (location: string, unit: string = "fahrenheit"): string => {
+            return JSON.stringify({
+                location,
+                temperature: 75,
+                unit,
+                condition: "sunny",
+                humidity: 60,
+            });
+        };
+
+        const availableFunctions: Record<string, (...args: any[]) => string> = {
+            get_weather: getWeather,
+        };
+
+        const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+
+        const input: PromptInput<string, WeatherReport> = {
+            input: "Get the weather for Miami and format it as a report",
+            tools,
+            toolChoice: "auto",
+            outputSchema: WeatherReportSchema,
+            messages,
+        };
+
+        console.log("\n📥 INPUT:");
+        console.log(JSON.stringify({
+            input: input.input,
+            tools: `${tools.length} tool(s)`,
+            outputSchema: this.getSchemaStructure(WeatherReportSchema),
+        }, null, 2));
+
+        let response = await this.client.prompt(input);
+
+        // Handle tool calls
+        if (response.status === PromptResponseStatus.SUCCESS && response.toolCalls) {
+            console.log("\n🔧 EXECUTING FUNCTION:");
+
+            messages.push({
+                role: "assistant",
+                content: response.raw.choices[0].message.content,
+                tool_calls: response.toolCalls,
+            });
+
+            for (const toolCall of response.toolCalls) {
+                const functionName = toolCall.function.name;
+                const functionArgs = JSON.parse(toolCall.function.arguments);
+
+                console.log(`  → ${functionName}:`, functionArgs);
+
+                const functionResponse = availableFunctions[functionName](...Object.values(functionArgs));
+                console.log(`  ← ${functionResponse}`);
+
+                messages.push({
+                    role: "tool",
+                    tool_call_id: toolCall.id,
+                    content: functionResponse,
+                });
+            }
+
+            // Get final structured response
+            response = await this.client.prompt({
+                input: input.input,
+                tools,
+                outputSchema: WeatherReportSchema,
+                messages,
+            });
+        }
+
+        console.log("\n📤 FINAL RESPONSE:");
+        console.log(JSON.stringify({
+            status: response.status,
+            structuredOutput: response.structuredOutput,
+            usage: response.usage,
+            cost: response.cost,
+        }, null, 2));
+
+        if (response.status === PromptResponseStatus.SUCCESS) {
+            console.log("\n✅ SUCCESS - Function call with structured output");
+            console.log("\n📋 Validated Output:");
+            console.log(JSON.stringify(response.structuredOutput, null, 2));
+        } else {
+            console.log(`\n❌ ERROR: ${response.status}`);
+        }
+
+        console.log("=".repeat(80) + "\n");
+    }
+
+    /**
+     * Example 19: Force specific function call
+     */
+    async forceSpecificFunction() {
+        console.log("\n" + "=".repeat(80));
+        console.log("Example 19: Force Specific Function Call");
+        console.log("=".repeat(80));
+
+        const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+            {
+                type: "function",
+                function: {
+                    name: "calculate_total",
+                    description: "Calculate the total cost including tax",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            subtotal: { type: "number" },
+                            taxRate: { type: "number" },
+                        },
+                        required: ["subtotal", "taxRate"],
+                    },
+                },
+            },
+            {
+                type: "function",
+                function: {
+                    name: "get_weather",
+                    description: "Get weather information",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            location: { type: "string" },
+                        },
+                        required: ["location"],
+                    },
+                },
+            },
+        ];
+
+        const calculateTotal = (subtotal: number, taxRate: number): string => {
+            const tax = subtotal * taxRate;
+            const total = subtotal + tax;
+            return JSON.stringify({ subtotal, tax, total });
+        };
+
+        const getWeather = (location: string): string => {
+            return JSON.stringify({ location, temp: 72, condition: "sunny" });
+        };
+
+        const availableFunctions: Record<string, (...args: any[]) => string> = {
+            calculate_total: calculateTotal,
+            get_weather: getWeather,
+        };
+
+        const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+
+        // Force calculate_total even though the query might seem ambiguous
+        const input: PromptInput<string, string> = {
+            input: "My purchase was $100",
+            tools,
+            toolChoice: {
+                type: "function",
+                function: { name: "calculate_total" },
+            },
+            messages,
+        };
+
+        console.log("\n📥 INPUT:");
+        console.log(JSON.stringify({
+            input: input.input,
+            toolChoice: "Force calculate_total function",
+        }, null, 2));
+
+        let response = await this.client.prompt(input);
+
+        if (response.status === PromptResponseStatus.SUCCESS && response.toolCalls) {
+            console.log("\n🔧 FORCED FUNCTION CALL:");
+
+            messages.push({
+                role: "assistant",
+                content: response.raw.choices[0].message.content,
+                tool_calls: response.toolCalls,
+            });
+
+            for (const toolCall of response.toolCalls) {
+                const functionName = toolCall.function.name;
+                const functionArgs = JSON.parse(toolCall.function.arguments);
+
+                console.log(`  → ${functionName}:`, functionArgs);
+
+                const functionResponse = availableFunctions[functionName](...Object.values(functionArgs));
+                console.log(`  ← ${functionResponse}`);
+
+                messages.push({
+                    role: "tool",
+                    tool_call_id: toolCall.id,
+                    content: functionResponse,
+                });
+            }
+
+            response = await this.client.prompt({
+                input: input.input,
+                tools,
+                messages,
+            });
+        }
+
+        console.log("\n📤 FINAL RESPONSE:");
+        console.log(JSON.stringify({
+            status: response.status,
+            content: response.content,
+        }, null, 2));
+
+        if (response.status === PromptResponseStatus.SUCCESS) {
+            console.log("\n✅ SUCCESS - Forced function call completed");
+        } else {
+            console.log(`\n❌ ERROR: ${response.status}`);
+        }
+
+        console.log("=".repeat(80) + "\n");
+    }
+
     // ==================== Run All Examples ====================
 
     /**
@@ -649,8 +1217,8 @@ export class OpenAIClientExamples {
     }
 
     /**
-     * Run all examples
-     */
+ * Run all examples
+ */
     async runAllExamples() {
         try {
             console.log("\n\n" + "╔".repeat(80));
@@ -697,6 +1265,19 @@ export class OpenAIClientExamples {
             this.addSeparation();
 
             await this.batchProcessing();
+            this.addSeparation();
+
+            // NEW FUNCTION CALLING EXAMPLES
+            await this.basicFunctionCalling();
+            this.addSeparation();
+
+            await this.multipleFunctionCalls();
+            this.addSeparation();
+
+            await this.functionCallingWithStructuredOutput();
+            this.addSeparation();
+
+            await this.forceSpecificFunction();
 
             console.log("\n\n" + "╔".repeat(80));
             console.log("✅ ALL EXAMPLES COMPLETED SUCCESSFULLY");
